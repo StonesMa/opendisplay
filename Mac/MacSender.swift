@@ -137,6 +137,10 @@ final class MacSender: NSObject, SCStreamOutput, SCStreamDelegate {
     private var dropsNetTotal = 0
     private var needsKeyframe = true
     private var connectionReady = false
+    // Queue-confined, like inputInjector. When true, input messages from the
+    // receiver are dropped on the Mac side — the receiver app is untouched,
+    // so this works with any iOS build, including legacy iOS 12 devices.
+    private var inputMuted = false
     // Queue-confined. A reconnect can land on a different receiver app at the
     // same address (e.g. an H.264-only release build): until this connection's
     // hello offers HEVC, an HEVC stream is neither announced nor sent to it.
@@ -2526,6 +2530,13 @@ final class MacSender: NSObject, SCStreamOutput, SCStreamDelegate {
             )
             return
         }
+        // Ignore input from this panel entirely when muted. The receiver is
+        // not involved: we simply stop feeding its touches to the injector,
+        // which also means no protocol change and no iOS-side rebuild.
+        // Video, stats and every other control message still flow normally.
+        if inputMuted, ["touch", "scroll", "pencil", "proximity"].contains(type) {
+            return
+        }
         switch type {
         case "ping":
             // Echo with our clock so the phone can estimate the offset
@@ -3217,6 +3228,18 @@ final class MacSender: NSObject, SCStreamOutput, SCStreamDelegate {
             guard let self else { return }
             Log.info("asking the receiver to \(action.rawValue)")
             self.sendJSONFrame("{\"type\":\"\(WireMessage.power)\",\"action\":\"\(action.rawValue)\"}")
+        }
+    }
+
+    /// Mute or unmute input coming from the receiver. Purely local: no wire
+    /// message, so it takes effect immediately with an unmodified receiver.
+    /// Turning it off releases any press that was active at that instant.
+    func setInputMuted(_ muted: Bool) {
+        queue.async { [weak self] in
+            guard let self, self.inputMuted != muted else { return }
+            self.inputMuted = muted
+            Log.info("receiver input \(muted ? "muted" : "unmuted") on this Mac")
+            if muted { self.inputInjector?.releaseAll() }
         }
     }
 

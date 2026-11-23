@@ -71,6 +71,30 @@ final class InputInjector {
         return trusted
     }
 
+    /// Drop every input effect this injector might still have on the Mac.
+    /// Used when the user mutes a receiver's input: a finger or pen that was
+    /// down at that moment will never send its "up" (we discard it), so we
+    /// must release the button here or the Mac stays stuck in a drag.
+    /// `clickState` 0 keeps the forced release from registering as a click.
+    func releaseAll() {
+        // One click-free up releases both a finger press and a pen press:
+        // both post as the left button, and clickState 0 stops AppKit from
+        // synthesizing a click on this forced release.
+        if isDown || penDown {
+            let p = currentCursor()
+            if let ev = CGEvent(mouseEventSource: source, mouseType: .leftMouseUp,
+                                mouseCursorPosition: p, mouseButton: .left) {
+                ev.setIntegerValueField(.mouseEventClickState, value: 0)
+                ev.post(tap: .cghidEventTap)
+            }
+            isDown = false
+            penDown = false
+        }
+        penClickSession = nil
+        penLastClick = nil
+        if inRange { setProximity(entering: false, at: currentCursor()) }
+    }
+
     /// x/y are normalized [0,1] in video space (origin top-left).
     func handleTouch(phase: String, x: Double, y: Double) {
         let bounds = CGDisplayBounds(displayID)   // global CG coords, y-down

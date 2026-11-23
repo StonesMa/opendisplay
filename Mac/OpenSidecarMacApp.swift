@@ -152,6 +152,21 @@ final class DeviceSession: ObservableObject, Identifiable {
     // rather than WiFi — reported by the sender once connected.
     @Published var wired = false
 
+    /// Local mute for this panel's input. The receiver app keeps sending
+    /// touches; the Mac drops them. Persisted per device so a reconnect or
+    /// a sender relaunch keeps the choice.
+    @Published var inputMuted: Bool {
+        didSet { UserDefaults.standard.set(inputMuted, forKey: Self.inputMutedKey(for: id)) }
+    }
+
+    private static func inputMutedKey(for id: String) -> String { "inputMuted.\(id)" }
+
+    func setInputMuted(_ muted: Bool) {
+        guard inputMuted != muted else { return }
+        inputMuted = muted
+        sender.setInputMuted(muted)
+    }
+
     var transportLabel: String { onUSB ? "USB" : wired ? "Cable" : "WiFi" }
 
     // The Display size control (extend only): the choice for this device
@@ -185,6 +200,8 @@ final class DeviceSession: ObservableObject, Identifiable {
         self.target = target
         self.name = name
         self.sender = sender
+        self.inputMuted = UserDefaults.standard.object(
+            forKey: Self.inputMutedKey(for: id)) as? Bool ?? false
         if case .usb(let udid) = target {
             onUSB = true
             usbUDID = udid
@@ -740,6 +757,9 @@ final class SenderController: ObservableObject {
                                identityOffset: identityOffset(for: id),
                                awaitingWake: awaitingWake)
         let session = DeviceSession(id: id, target: target, name: name, sender: sender)
+        // Seed the Mac-side filter with the saved choice before any input can
+        // arrive; the method no-ops when it matches the default (false).
+        sender.setInputMuted(session.inputMuted)
         if case .wifi(let result) = target {
             session.wifiServiceName = serviceName(of: result)
         }
@@ -1294,6 +1314,19 @@ struct SessionRow: View {
                     DisplaySizePicker(session: session)
                 }
             }
+            // Mute a panel whose touchscreen misfires: the Mac ignores its
+            // touches while the video stream keeps running. Purely local.
+            Button {
+                session.setInputMuted(!session.inputMuted)
+            } label: {
+                Image(systemName: session.inputMuted ? "hand.raised.slash" : "hand.raised")
+            }
+            .controlSize(.small)
+            .foregroundStyle(session.inputMuted ? .orange : .secondary)
+            .help(session.inputMuted
+                  ? "Unblock touch input from \(title)"
+                  : "Block touch input from \(title) (its taps will be ignored)")
+
             Button("Disconnect") { controller.disconnect(session) }
                 .controlSize(.small)
         }
