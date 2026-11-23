@@ -140,7 +140,7 @@ final class MacSender: NSObject, SCStreamOutput, SCStreamDelegate {
     // Queue-confined, like inputInjector. When true, input messages from the
     // receiver are dropped on the Mac side — the receiver app is untouched,
     // so this works with any iOS build, including legacy iOS 12 devices.
-    private var inputMuted = false
+    private var inputMuted = true
     // Queue-confined. A reconnect can land on a different receiver app at the
     // same address (e.g. an H.264-only release build): until this connection's
     // hello offers HEVC, an HEVC stream is neither announced nor sent to it.

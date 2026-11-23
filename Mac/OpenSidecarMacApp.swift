@@ -200,8 +200,10 @@ final class DeviceSession: ObservableObject, Identifiable {
         self.target = target
         self.name = name
         self.sender = sender
+        // Default to muted: a panel that is only a display should not be
+        // able to drive the Mac. Users who want input opt in per device.
         self.inputMuted = UserDefaults.standard.object(
-            forKey: Self.inputMutedKey(for: id)) as? Bool ?? false
+            forKey: Self.inputMutedKey(for: id)) as? Bool ?? true
         if case .usb(let udid) = target {
             onUSB = true
             usbUDID = udid
